@@ -1,0 +1,741 @@
+ <html>
+<head>
+	<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+	<style>
+		#wrapper {
+			text-align: center;
+		}
+		#selecthome, #field, #selectaway{
+			display: inline-block;
+			vertical-align: middle;
+		}
+		svg {
+			display: block;
+			margin: auto;
+		}
+		rect, circle, line, path {
+			fill: none;
+			stroke-width: 4px;
+			stroke: white;
+		}
+		text {
+			fill: white;
+			text-anchor: middle;
+		}
+		bars.rect {
+			stroke-width: 0px;
+			fill: yellow;
+			stroke: none;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="wrapper">
+		<div id="selecthome"></div>
+		<div id="field"></div>
+		<div id="selectaway"></div>
+	</div>
+	<div id ="scorematrix"></div>	
+	
+	<script>
+		var height = 600;
+		var width = 1000;
+		
+		var svg = d3.select("#field").append("svg")
+			.attr("height", height).attr("width", width);
+		svg.style("background-color", "#00CC66");
+		
+		var padding = .1;
+		
+		var xpadding = width*.1/2;
+		var ypadding = height*.1/2;
+		
+		// sidelines
+		svg.append("rect")
+			.attr("x", xpadding)
+			.attr("y", ypadding)
+			.attr("width", width*(1-padding))
+			.attr("height", height*(1-padding))
+			
+		// centerline
+		svg.append("line")
+			.attr("x1", width/2)
+			.attr("y1", ypadding)
+			.attr("x2", width/2)
+			.attr("y2", height*(1-padding) + ypadding)
+		
+		// width and height of penalty areas
+		var xpenarea = width * .15;
+		var ypenarea = height * .55;
+		
+		// penalty area
+		svg.append("rect")
+			.attr("x", xpadding)
+			.attr("y", height/2 - ypenarea/2)
+			.attr("width", xpenarea)
+			.attr("height", ypenarea)
+		svg.append("rect")
+			.attr("x", width - xpenarea - xpadding)
+			.attr("y", height/2 - ypenarea/2)
+			.attr("width", xpenarea)
+			.attr("height", ypenarea)
+		
+		// width and height of goal areas
+		var xgoalarea = width * .05;
+		var ygoalarea = height * .28;
+		
+		// goal area
+		svg.append("rect")
+			.attr("x", xpadding)
+			.attr("y", height/2 - ygoalarea/2)
+			.attr("width", xgoalarea)
+			.attr("height", ygoalarea)
+		svg.append("rect")
+			.attr("x", width - xgoalarea - xpadding)
+			.attr("y", height/2 - ygoalarea/2)
+			.attr("width", xgoalarea)
+			.attr("height", ygoalarea)
+		
+		// width and height of goals
+		var xgoal = width * .02;
+		var ygoal = height * .14;
+		
+		// goals
+		svg.append("rect")
+			.attr("x", xpadding - xgoal)
+			.attr("y", height/2 - ygoal/2)
+			.attr("width", xgoal)
+			.attr("height", ygoal)
+		svg.append("rect")
+			.attr("x", width - xpadding)
+			.attr("y", height/2 - ygoal/2)
+			.attr("width", xgoal)
+			.attr("height", ygoal)
+
+		// radius of center circle proportional to field
+		var rad = width/12;
+		
+		// center circle
+		svg.append("circle")
+			.attr("cx", width/2)
+			.attr("cy", height/2)
+			.attr("r", rad)
+		
+		// left penalty arc (centered at penalty mark)
+		var larc = d3.svg.arc()
+			.innerRadius(rad)
+			.outerRadius(rad)
+			.startAngle(37 * Math.PI/180)
+			.endAngle(142 * Math.PI/180);
+		svg.append("path")
+			.attr("d", larc)
+			.attr("transform", 
+				"translate (" + (xpenarea - xgoalarea + xpadding) 
+					+ "," + height/2 + ")")
+
+		// right penalty arc
+		var rarc = d3.svg.arc()
+			.innerRadius(rad)
+			.outerRadius(rad)
+			.startAngle((360 - 37) * Math.PI/180)
+			.endAngle((360 - 142) * Math.PI/180);
+		svg.append("path")
+			.attr("d", rarc)
+			.attr("transform", 
+				"translate (" + (width - (xpenarea - xgoalarea + xpadding))
+					+ "," + height/2 + ")")
+		
+		// corner arcs
+		var ul_arc = d3.svg.arc()
+			.innerRadius(30)
+			.outerRadius(30)
+			.startAngle(Math.PI/2).endAngle(Math.PI);
+		var bl_arc = d3.svg.arc()
+			.innerRadius(30)
+			.outerRadius(30)
+			.startAngle(0).endAngle(Math.PI/2);
+		var ur_arc = d3.svg.arc()
+			.innerRadius(30)
+			.outerRadius(30)
+			.startAngle(Math.PI).endAngle(3/2 * Math.PI);
+		var br_arc = d3.svg.arc()
+			.innerRadius(30)
+			.outerRadius(30)
+			.startAngle(3/2 * Math.PI).endAngle(2 * Math.PI);
+		
+		// upper left
+		svg.append("path")
+			.attr("d", ul_arc)
+			.attr("transform", 
+				"translate (" + xpadding + "," + ypadding + ")");
+		// bottom left
+		svg.append("path")
+			.attr("d", bl_arc)
+			.attr("transform", 
+				"translate (" + xpadding + "," + (height - ypadding) + ")");
+		// upper right
+		svg.append("path")
+			.attr("d", ur_arc)
+			.attr("transform", 
+				"translate (" + (width - xpadding) + "," + ypadding + ")");
+		// bottom right
+		svg.append("path")
+			.attr("d", br_arc)
+			.attr("transform", 
+				"translate (" + (width - xpadding) + "," + (height - ypadding) + ")");
+				
+		var stats;
+		//Function to aggreagate the stats of a match
+		var calculateResult = function calculateResult(e,h,a){
+			//FTR = FullTimeResult(H,D,A)
+			if (e.FTR == "H"){
+				h.HomeWin += Number(1);
+				h.HomeTotalPoints+=Number(3);//each win earns 3 points
+				a.AwayLoss+=Number(1);
+			}
+			else if (e.FTR == "D"){
+				h.HomeDraw +=Number(1);
+				h.HomeTotalPoints+=Number(1);//each draw earns 1 point
+				a.AwayDraw +=Number(1);
+				a.AwayTotalPoints+=Number(1);
+			}
+			else{
+				h.HomeLoss+=Number(1);
+				a.AwayWin+=Number(1);
+				a.AwayTotalPoints+= Number(3);
+			}
+			h.HomeGoals+=Number(e.FTHG);//FTHG = FullTime Home Team Goals
+			h.HomeShots += Number(e.HS);//HS = Home Shots
+			a.AwayGoals+=Number(e.FTAG);
+			a.AwayShots += Number(e.AS);
+		}
+		
+		//convert the team's stats (for home or away, not both)
+		//    into a sequence that can be read by the bar graph
+		var calculateSequence = function (teamstats) {
+			var s = [];
+			s[0] = teamstats.HomeWin;
+			s[2] = teamstats.HomeDraw;
+			s[4] = teamstats.HomeLoss;
+			s[6] = teamstats.HomeGoals;
+			s[8] = teamstats.HomeShots;
+			s[10] = teamstats.HomeTotalPoints;
+			s[1] = teamstats.AwayWin;
+			s[3] = teamstats.AwayDraw;
+			s[5] = teamstats.AwayLoss;
+			s[7] = teamstats.AwayGoals;
+			s[9] = teamstats.AwayShots;
+			s[11] = teamstats.AwayTotalPoints;
+			
+			return s;
+		}
+		
+		//called when selection is made on drop-down menu
+		//draws black box background and then calls drawBarGraph
+		var draw = function (teamlist) {
+		
+			var box_width = width/2 - xpadding*3;
+			var box_height = height - ypadding*6;
+			
+			//create the menu to select the home team in its div
+			//draw the background box and bar graph (on top of the field)
+			//    for the home team
+			var box_xl = xpadding*1.5;
+			var box_yl = ypadding*5;
+			var leftbars = null;
+			drawBox(box_xl, box_yl, box_width, box_height, "homestats");
+			drawBarGraph(box_xl + 10, box_yl - 10, box_width - 10, box_height - 10, teamlist, "homebars", ["Select Home Team", "selecthome"], "homestats");
+
+			//create the menu to select the away team in its div
+			//draw the background box and bar graph for the away team
+			var box_xr = width/2 + xpadding*1.5;
+			var box_yr = ypadding*5;
+			var rightbars = null;
+			drawBox(box_xr, box_yr, box_width, box_height, "awaystats");
+			drawBarGraph(box_xr + 10, box_yr - 10, box_width - 10, box_height - 10, teamlist, "awaybars", ["Select Away Team", "selectaway"], "awaystats");
+			
+			var scoreBox_x = width/2 - xpadding*3.4;
+			var scoreBox_y = ypadding;
+			var scoreBox_width = width/2 - xpadding*3;
+			var scoreBox_height = height - ypadding*17;
+			drawBox(scoreBox_x,scoreBox_y,scoreBox_width,scoreBox_height,"scorebox");
+		}
+		
+		var drawBox = function (box_x, box_y, box_width, box_height, boxid) {
+			//rectangle and text area to place stats in
+			//initially not visible until a change to the menu has been made
+			svg.append("rect")
+				.attr("x", box_x)
+				.attr("y", box_y)
+				.attr("width", box_width)
+				.attr("height", box_height)
+				.attr("id", boxid)
+				.style("fill", "none")
+				.style("stroke", "none");
+		}
+		
+		//draw a bar graph with the given string
+		var drawBarGraph = function (box_x, box_y, box_width, box_height, teamlist, barclass, menustrs, boxid) {
+		
+			//dummy sequence
+			//this won't show up because the default choice on the menu is
+			//    showing no teams
+			//so I just chose to show the first team (Malaga)'s stats
+			//    on both bar graphs (which won't show up anyway)
+			var sequence = calculateSequence (teams[teamlist[0]]);
+			
+			var padding = 50;
+			
+			// set xscale (linear)
+			var xScale = d3.scale.linear().domain([0, 11]).range([padding + box_x, box_width - padding + box_x]);
+			
+			//set yscale
+			var yScale = d3.scale.linear()
+				.domain([0, d3.max(sequence)])
+				.range([box_y + box_height - padding - 10, box_y + padding]);
+				
+			var barwidth = Math.ceil(xScale(1) - xScale(0) - 2);
+			
+			//draw the rectangle corresponding to each bar
+			var bars = svg.selectAll("." + barclass)
+				.data(sequence)
+				.enter()
+				.append("rect")
+				.attr("x", function (d, i) { 
+					if (i % 2 == 1) { return xScale(i) - 2;}
+					else { return xScale(i); }})
+				.attr("y", function (d) { return yScale(d); })
+				.attr("width", barwidth)
+				.attr("height", function (d) { return box_y + box_height - padding - yScale(d) - 10; })
+				.style("stroke", "none");
+			
+			//label above each bar with the frequency/number
+			//    e.g. number of wins on the first bar
+			var barlabels = svg.selectAll("." + barclass)
+				.data(sequence)
+				.enter()
+				.append("text")
+				.text(function(d) { return d;})
+				.attr("x", function (d, i) { return xScale(i) + barwidth/2; })
+				.attr("y", function (d) { return yScale(d); });
+			
+			//the axes aren't called yet because we only want the 
+			//    bar graph, axes, and labels
+			//    to show up after the first team on the menu is chosen
+			
+			// set yaxis
+			var yAxis = d3.svg.axis().scale(yScale).orient("left");
+			svg.append("g")
+				.attr("class", barclass + "yAxis")
+				.attr("transform", "translate(" + (box_x + padding) + ", 0)");
+			
+			// set xaxis
+			var xOrdinalScale = d3.scale.ordinal().rangeRoundBands([padding + box_x, box_width - padding + box_x  + barwidth]);
+			var ticksarr = ["Wins", "Draws", "Losses", "Goals", "Shots", "Total Points"];
+			xOrdinalScale.domain(ticksarr);
+			
+			var xAxis = d3.svg.axis().scale(xOrdinalScale);
+			svg.append("g")
+				.attr("class", barclass + "xAxis")
+				.attr("transform", "translate(0, " + (box_height - padding + box_y - 10) + ") ");
+			  
+			// create axis labels
+			yaxis_label_x = 10 + box_x;
+			yaxis_label_y = box_height/2 + box_y;
+			svg.append("text")
+				.attr("class", barclass + "text")
+				.text("Frequency")
+				.attr("x", yaxis_label_x)
+				.attr("y", yaxis_label_y)
+				.attr("transform", "rotate(-90," + yaxis_label_x + "," + yaxis_label_y + ")");
+			
+			xaxis_label_x = box_width/2 + box_x;
+			xaxis_label_y = 5 + box_height + box_y;
+			svg.append("text")
+				.attr("class", barclass + "text")
+				.text("Data")
+				.attr("x", xaxis_label_x)
+				.attr("y", xaxis_label_y);
+			
+			//create the select home drop-down menu in the corresponding div
+			var menu = d3.select("#" + menustrs[1]).append("select")
+			
+			//add default option that does nothing when selected
+			//this will have selectedIndex 0
+			menu.append("option")
+				.text(menustrs[0]);
+			menu.selectAll("option")
+				.data(teamlist.sort())
+				.enter()
+				.append("option")
+				.text(function (d) { return d; });
+			
+			//initially make text not visible
+			//    because the bar graph should not show up at all yet
+			svg.selectAll("text").style("fill", "none");
+
+			//when the drop-down menu has been changed
+			menu.on("change", function () {
+			
+				//if the menu selection is "Select _____ Team", then make no changes
+				//"Select ______ Team" is the first choice on the menu
+				//    so it has the selectedIndex == 0
+				//    so we can ignore it if it is chosen because it isn't a team
+				//otherwise
+				if (this.selectedIndex != 0) {
+				
+					//make the box background show up
+					svg.select("#" + boxid).style("fill", "black").style("opacity", .5);
+
+					selectedteam = teamlist[this.selectedIndex];
+					
+					//update bar graph with new data from the new team selection
+					//check what data (home or away data) to get based on 
+					//    which menu was chosen: "selecthome" or "selectaway"
+					
+					//if the home team is changed
+					if (menustrs[1] == "selecthome") {
+						showScoreBox.home = teams[selectedteam];
+						sequence = calculateSequence (teams[selectedteam]);
+					}
+					//else the away team is changed
+					else {
+						showScoreBox.away = teams[selectedteam];
+						sequence = calculateSequence (teams[selectedteam]);
+					}
+					//show score box after two teams are selected
+					if (showScoreBox.home && showScoreBox.away && !showScoreBox.shown){
+							svg.select("#scorebox").style("fill", "black").style("opacity", .5);
+							showScoreBox.shown = true;
+							svg.append("text")
+									.attr("id","score")
+									.attr("font-family", "sans-serif")
+                 					.attr("font-size", "50px")
+                 					.attr("fill", "red")
+									.attr("x",width/2)
+									.attr("y",ypadding*3);
+							svg.append("text")
+									.text("HOME")
+									.attr("id","homeLabel")
+									.attr("font-family", "sans-serif")
+                 					.attr("font-size", "20px")
+                 					.attr("fill", "red")
+									.attr("x",width/2 - xpadding*2)
+									.attr("y",ypadding*2.7);
+							svg.append("text")
+									.text("AWAY")
+									.attr("id","awayLabel")
+									.attr("font-family", "sans-serif")
+                 					.attr("font-size", "20px")
+                 					.attr("fill", "red")
+									.attr("x",width/2 + xpadding*2)
+									.attr("y",ypadding*2.7);
+					}
+					//update scores. If selected the same team, show total points and tell if the team
+					//is better home or away
+					if(showScoreBox.shown){
+						if(showScoreBox.home.name != showScoreBox.away.name){
+							var score = matchScores[showScoreBox.home.name+"_"+showScoreBox.away.name];
+							svg.select("#score").text(score.homeGoals+" X "+score.awayGoals).attr("font-size", "50px");;
+							svg.select("#homeLabel").text("HOME");
+							svg.select("#awayLabel").text("AWAY");
+						}
+						else{
+							var t = showScoreBox.home;
+							var totalPoints = t.HomeTotalPoints+t.AwayTotalPoints;
+							var dif = t.HomeTotalPoints - t.AwayTotalPoints;
+							
+							if(dif > 0 &&  dif <= 8 ){
+								svg.select("#score")
+									.text(t.name + " plays slightly better at home!")
+									.attr("font-size", "18px");
+							}
+							else if (dif > 8){
+								svg.select("#score")
+									.text(t.name + " plays A LOT better at home!")
+									.attr("font-size", "18px");
+							}
+							
+							else{
+								svg.select("#score")
+									.text(t.name + " plays better away!")
+									.attr("font-size", "18px");
+							}
+							
+							svg.select("#homeLabel").text("");
+							svg.select("#awayLabel").text("");
+						}
+					}
+					
+					//rescale bar graph data
+					yScale.domain([0, d3.max(sequence)]);
+					
+					//make the axes show up now and update the yaxis through new data
+					svg.select("." + barclass +  "yAxis").transition().call(yAxis);
+					svg.select("." + barclass + "xAxis").transition().call(xAxis)
+						.selectAll("text")
+							.style("text-anchor", "middle")
+							.attr("transform", function (d) { 
+								return "translate (" + (-5) + "," + 10 + ") rotate(-30)";
+							});
+					
+					//transition to move the bars' position so that they stay rooted to
+					//    the x-axis and don't start floating around
+					//transition heights so that the bars won't jump to the new height,
+					//    but instead transition to the new height
+					bars.data(sequence).transition()
+						.attr("y", function (d) { return yScale(d); })
+						.attr("height", function (d) { return box_height - padding + box_y - yScale(d) -  10; })
+						.style("fill", function (d, i) {
+								if (i % 2 == 0) { return "red"; }
+								else { return "yellow"; }
+							});
+						
+					//also update the text on top of each bar of the bar graph
+					//   where the text is the height of each bar
+					barlabels.style("fill", "white");
+					barlabels.data(sequence).transition()
+						.attr("y", function (d) { return yScale(d); })
+						.text( function (d) { return d; });
+						
+					//make the text visible now
+					svg.selectAll("." + barclass + "text").style("fill", "white");
+					
+					//update teams logo
+					drawLogo(selectedteam,box_x + box_width/2 - xpadding,ypadding/2,boxid);
+				}
+			});
+		}
+		
+		var drawLogo = function (team,x,y,boxid){
+			svg.select("#"+boxid+"_image").remove();
+			svg.append("image")
+				.attr("id",boxid+"_image")
+				.attr("xlink:href", team+".png")
+				.attr("width",100)
+				.attr("height",100)
+				.attr("x",x)
+				.attr("y",y);		
+		}
+		
+		//cache images so they load faster when called	
+		var cacheImages = function(array){
+			if (!cacheImages.list) {
+				cacheImages.list = [];
+			}
+			for (var i = 0; i < array.length; i++) {
+				var img = new Image();
+				img.src = array[i]+".png";
+				cacheImages.list.push(img);
+		}
+		}	
+		var showScoreBox = new Object();
+		showScoreBox.home = false;
+		showScoreBox.away = false;
+		showScoreBox.shown = false;
+		
+		
+		d3.csv("SP1.csv",function(error,data){
+			stats = data;
+			//Create a hashtable of teams to store their info inside team objects
+			//Object should have HomeWin,HomeDraw,HomeLoss,HomeGoals,HomeShots,HomeAttendance,HomeTotalPoints,AwayWin,AwayDraw,AwayLoss,
+			//AwayGoals,AwayShots,AwayTotalPoints
+			teams = new Object();
+			matchScores = new Object();
+			stats.forEach(function(entry){
+				if(!(entry.HomeTeam in teams)){
+					var homeTeam = new Object();
+					homeTeam.name = entry.HomeTeam;
+					homeTeam.HomeWin =0;
+					homeTeam.HomeDraw = 0;
+					homeTeam.HomeLoss = 0;
+					homeTeam.HomeGoals = 0;
+					homeTeam.HomeShots = 0;
+					homeTeam.HomeTotalPoints = 0;
+					homeTeam.AwayWin = 0;
+					homeTeam.AwayDraw = 0;
+					homeTeam.AwayLoss = 0;
+					homeTeam.AwayGoals = 0;
+					homeTeam.AwayShots = 0;
+					homeTeam.AwayTotalPoints = 0;
+				}
+				else{
+					homeTeam = teams[entry.HomeTeam];
+				}
+				if(!(entry.AwayTeam in teams)){
+					var awayTeam = new Object();
+					awayTeam.name = entry.AwayTeam;
+					awayTeam.HomeWin =0;
+					awayTeam.HomeDraw = 0;
+					awayTeam.HomeLoss = 0;
+					awayTeam.HomeGoals = 0;
+					awayTeam.HomeShots = 0;
+					awayTeam.HomeTotalPoints = 0;
+					awayTeam.AwayWin = 0;
+					awayTeam.AwayDraw = 0;
+					awayTeam.AwayLoss = 0;
+					awayTeam.AwayGoals = 0;
+					awayTeam.AwayShots = 0;
+					awayTeam.AwayTotalPoints = 0;
+				}
+				else{
+					awayTeam = teams[entry.AwayTeam];
+				}
+				var game = entry.HomeTeam+"_"+entry.AwayTeam;
+				matchScores[game] = new Object;
+				matchScores[game].homeGoals = Number(entry.FTHG);
+				matchScores[game].awayGoals = Number(entry.FTAG);
+				calculateResult(entry,homeTeam,awayTeam);
+				teams[entry.HomeTeam] = homeTeam;
+				teams[entry.AwayTeam] = awayTeam;
+			});
+			
+			//field
+			var teamlist = Object.keys(teams);
+			cacheImages(teamlist);
+			draw(teamlist);
+			
+			//(keep) how to change the selected index in the drop down menu:
+			//d3.select("#selecthome").select("select").node().selectedIndex = 5;
+
+			//matrix
+			var topTeams = calculateTopTeams(5,teams);
+			drawMatrix(5,calculateMatrix(topTeams));
+		});
+		
+		//calculate n TopTeams to show on matrix
+		var calculateTopTeams = function(n,teams){
+			function compare(a,b) {
+				if (a.HomeTotalPoints+a.AwayTotalPoints < b.HomeTotalPoints+b.AwayTotalPoints)
+					return 1;
+				if (a.HomeTotalPoints+a.AwayTotalPoints < b.HomeTotalPoints+b.AwayTotalPoints)
+					return -1;
+				else{
+					if (a.HomeWin+a.AwayWin < b.HomeWin+b.AwayWin)
+						return 1;
+					if (a.HomeWin+a.AwayWin > b.HomeWin+b.AwayWin)
+						return -1;
+				}
+				return 0;
+			};
+			var k = Object.keys(teams);
+			var teamObjects = [];
+			k.forEach(function(w){
+				teamObjects.push(teams[w]);
+			});
+			return teamObjects.sort(compare).slice(0,n);
+		};
+			
+		var calculateMatrix = function(teams){
+			var n = teams.length+1;
+			var matrix = new Array(n);
+			
+			for(var i = 0; i < n; i++){
+				matrix[i] = new Array(n);
+				
+				matrix[i][0] = null;
+				
+				for(var j = 0; j < n; j++){
+					if (j = 0 && i >0){
+						matrix[i][j] = teams[i-1].name; 
+					}
+					else if (i == j){
+						matrix[i][j] = "X";
+					}
+					else if (i > 0){
+						var score = matchScores[teams[i-1].name+"_"+teams[j-1].name];
+						matrix[i][j] = score.homeGoals + "X" + score.awayGoals;
+					}
+					else {
+						matrix[i][j] = null;
+					}
+				}
+			}
+			return matrix;
+		}
+		
+		var drawMatrix = function(numTeams,matrix){
+			// Setup
+			var wd = 1000;
+			var ht = 1000;
+			var pad = 5;
+			numTeams++;//add headers
+			var div = d3.select('#scorematrix');
+			var svg = div.append('svg')
+				.attr('width', wd)
+				.attr('height', ht);
+			var rw = (wd- pad*numTeams-1)/numTeams*1.0;
+			var rh = (ht - pad*numTeams -1)/numTeams*1.0;  
+			var data = [];
+			
+			var range = [];
+			for (var i = 0; i < numTeams; i++) {
+				range[i] = "" + i;
+			}
+			data[0] = range;
+
+			for( var i = 1; i < numTeams; i++){
+				data[i] = matrix[i];
+			}
+	
+			// Create a group for each row in the data matrix and translate the 
+			// group vertically
+			var grp = svg.selectAll('g')
+				.data(data)
+				.enter()
+				.append('g')
+				.attr('transform', function(d, i) {
+					return 'translate(0, ' + (rh + pad) * i + ')';
+				});
+			
+			// For each group, create a set of rectangles and them to the inner array
+			// (the inner array is binded to the group)
+			grp.selectAll('rect')
+				.data(data)
+				.enter()
+				.append('rect')
+					.attr('x', function(d, i) { return (rw + pad) * i; })
+					.attr('width', rw)
+					.attr('height', rh)
+					.attr("class","mRect")
+					.text(function(d){return d;})
+					.attr("id",function(d,row){ return "rect"+ i });
+			svg.selectAll(".mRect").style("stroke","black").style("stroke-width",1);
+			
+			var textdata = [];
+			data.forEach( function (d, i) {
+				d.forEach( function (score, j) {
+					textdata[i*6 + j] = score;
+				});
+			});
+			
+			var col = -1;
+			var row = 0;
+			
+			svg.selectAll('text')
+				.data(textdata)
+				.enter()
+				.append("text")
+				.attr('x', function(d, i) { 
+						if (col == 5) { col = 0; }
+						else { col++; }
+						return rw*col + rw/2 + pad*col;
+					})
+				.attr('y', function(d, i) { 
+						if (i == 0) { return rh/2 + pad*row; }
+						if (i % 6 == 0) { row++; }
+						return rh*row + rh/2 + pad*row;
+					})
+				.style("fill","black")
+				.text(function (d) { 
+						if (d == null) { return "null"; }
+						else { return d; }
+					});
+					
+					console.log(textdata);
+		}
+	</script>
+</body>
+
+</html>
